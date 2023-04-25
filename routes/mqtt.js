@@ -7,10 +7,13 @@ import { liveDataModel } from "../models/liveDataModel.js";
 import { lightDataModel } from "../models/lightDataModel.js";
 import net from "https";
 const https = net;
+
 //const api_key = "523956835871b2c18c5357e09cbe3618";// needs to be in an .env file but low on time
 import mail from "nodemailer";
 const nodemailer = mail;
 import dotenv from "dotenv";
+dotenv.config();
+const TEN_MIN = 10 * 60 * 1000;
 //import { LoggingData, LoggingProfile } from "../models/loggingDataModel.js";
 //import { deviceProfile } from "../models/edgeDeviceModel.js";
 export const aedes = new Aedes({ keepalive: 0, heartbeatInterval: 60000 });
@@ -154,14 +157,21 @@ export function aedesHandel() {
       const location = packet.topic.split("/")[0];
       const { device, lux, temp, humidity } = await JSON.parse(packet.payload);
 
-      const liveInstances = await new liveDataModel({
-        deviceName: device,
-        lux,
-        temp,
-        humidity,
-        location,
+      const item = liveDataModel.findOne({
+        timestamp: { $lte: new Date(Date.now() - TEN_MIN) },
       });
-      const res = liveInstances.save();
+
+      if (item) {
+        const liveInstances = await new liveDataModel({
+          deviceName: device,
+          lux,
+          temp,
+          humidity,
+          location,
+        });
+        const res = liveInstances.save();
+      }
+
       console.log(
         "Client \x1b[31m" +
           (client ? client.id : "BROKER_" + aedes.id) +
@@ -238,9 +248,7 @@ export function aedesHandel() {
     console.log(
       "MQTT client \x1b[32m" +
         (client ? client.id : client) +
-        "\x1b[0m subscribed to topics: " +
-        subscriptions.map((s) => s.topic).join("\n"),
-      "from broker",
+        "\x1b[0m subscribed to topics: ",
       aedes.id
     );
   };

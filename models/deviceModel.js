@@ -11,7 +11,7 @@ const edgeDeviceSchema = mongoose.Schema(
     auto: Boolean,
     mqttPass: String,
     active: Boolean,
-    Status: Boolean,
+    status: Boolean,
   },
   { timestamps: true }
 );
