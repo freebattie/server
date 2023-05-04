@@ -1,96 +1,40 @@
 import Aedes from "aedes";
-import { sendMail } from "../lib/mail.js";
-import { getWeatherData } from "../lib/weather.js";
+import { sendDeviceAlarm, sendLocationAlarm } from "../lib/mail.js";
+
 import { deviceModel, ActiveDeviceModel } from "../models/deviceModel.js";
 import { alarmModel } from "../models/alarmModel.js";
 import { liveDataModel } from "../models/liveDataModel.js";
 import { lightDataModel } from "../models/lightDataModel.js";
 import mail from "nodemailer";
 const nodemailer = mail;
+const debug = true;
 import dotenv from "dotenv";
 import { userModel } from "../models/userModel.js";
 import { comparePassword } from "../lib/crypto.js";
+import { readVersion } from "../lib/readFile.js";
+let send = true;
+import {
+  addTokenstoDBForChecking,
+  sendNotification,
+} from "../lib/expoNotifaction.js";
+import { ValidTokenModel } from "../models/validTokenModel.js";
 dotenv.config();
+
 const TEN_MIN = 10 * 60 * 1000;
 export const aedesWS = new Aedes({
-  keepalive: 0,
-  heartbeatInterval: 60000,
-  /* subscribe: async (subscriptions, client) => {
-    console.log(
-      "MQTT client \x1b[32m" +
-        (client ? client.id : client) +
-        "\x1b[0m subscribed to topics: " +
-        subscriptions.map((s) => s.topic).join("\n"),
-      "from broker",
-      aedesWS.id
-    );
-  },
-  unsubscribe: async (subscriptions, client) => {
-    console.log(
-      "MQTT client \x1b[32m" +
-        (client ? client.id : client) +
-        "\x1b[0m unsubscribed to topics: " +
-        subscriptions.join("\n"),
-      "from broker",
-      aedesWS.id
-    );
-  }, */
-  client: async (client) => {
-    console.log(
-      "Client Connected: \x1b[33m" + (client ? client.id : client) + "\x1b[0m",
-      "to broker",
-      aedesWS.id
-    );
-    client._keepaliveInterval;
-    console.log("Keepalive timeout: " + client._keepaliveInterval);
-    //aedesWS.publish({ topic: 'setup/profile', payload: {name:"edge-01",location:"helldomen",shaft:2,version:2,profileName:"kongensmann"},username:"per",password:"test"});
-  },
-  clientDisconnect: async (client) => {
-    console.log(
-      "Client Disconnected: \x1b[31m" +
-        (client ? client.id : client) +
-        "\x1b[0m",
-      "to broker",
-      aedesWS.id
-    );
-  },
-  keepaliveTimeout: async (client) => {
-    console.log(
-      "Client LOST CONNECTION: \x1b[31m" +
-        (client ? client.id : client) +
-        "\x1b[0m",
-      "to broker",
-      aedesWS.id
-    );
-  },
-  authorizeSubscribe: (client, subscriptions, callback) => {
-    console.log(
-      "MQTT client \x1b[32m" +
-        (client ? client.id : client) +
-        "\x1b[0m subscribed to topics: ",
-      aedesWS.id
-    );
-    if (
-      subscriptions.topic == client.id ||
-      subscriptions.topic === "test" ||
-      subscriptions.topic.startsWith("devices/") ||
-      subscriptions.topic.startsWith("locations/")
-    ) {
-      callback(null, subscriptions);
-      // will negate sub and return granted qos 128
-    } else {
-      callback(null, null);
-    }
-  },
   authenticate: async (client, username, password, callback) => {
-    console.log("password", password);
+    password = password?.toString("utf8");
+
     if (username && password) {
-      const person = await userModel.findOne({ userName: username });
+      const user = await userModel.findOne({
+        userName: username.toLowerCase(),
+      });
 
-      password = Buffer.from(password, "base64").toString();
+      //password = Buffer.from(password, "base64").toString();
 
-      if (await comparePassword(password, person.password)) {
-        if (person.role === "admin") {
+      if (!user) {
+      } else if (await comparePassword(password, user.password)) {
+        if (user.role === "admin") {
           client.admin = true;
           client.allowed = true;
           console.log("is admin");
@@ -98,6 +42,10 @@ export const aedesWS = new Aedes({
           client.allowed = true;
           console.log("is normal");
         }
+      } else {
+        console.log("not loged in");
+        client.allowed = false;
+        client.admin = false;
       }
     } else {
       console.log("not loged in");
@@ -107,51 +55,129 @@ export const aedesWS = new Aedes({
 
     return callback(null, true);
   },
+  authorizeSubscribe: (client, subscriptions, callback) => {
+    console.log(
+      "MQTT client \x1b[32m" +
+        (client ? client.id : client) +
+        "\x1b[0m subscribed to topics: ",
+      subscriptions.topic
+    );
+
+    console.log("====================================");
+    if (client.admin) {
+      console.log("is admin");
+      callback(null, subscriptions);
+    } else if (
+      (subscriptions.topic.startsWith("devices/") &&
+        subscriptions.topic.split("/")[1] === client.id) ||
+      subscriptions.topic === "update" ||
+      (subscriptions.topic.startsWith("locations/") &&
+        client.allowed &&
+        subscriptions.topic.endsWith("/update")) ||
+      (subscriptions.topic.startsWith("devices/") &&
+        subscriptions.topic.endsWith("/profile") &&
+        client.admin) ||
+      (subscriptions.topic.startsWith("find") && client.allowed) ||
+      (subscriptions.topic.startsWith("locations/") &&
+        subscriptions.topic.endsWith("/live") &&
+        client.allowed) ||
+      (subscriptions.topic.startsWith("locations/") &&
+        subscriptions.topic.endsWith("/light") &&
+        client.allowed) ||
+      (subscriptions.topic.startsWith("locations/") &&
+        subscriptions.topic.endsWith("/alarm") &&
+        client.allowed)
+    ) {
+      console.log("user allowed to sub  to topic", subscriptions.topic);
+      callback(null, subscriptions);
+    } else {
+      callback(null, null);
+    }
+  },
   authorizePublish: async (client, packet, callback) => {
     if (packet.topic.startsWith("$SYS/")) {
+      console.log("publish to sys not allowed");
       return callback(new Error("$SYS/" + " topic is reserved"));
     }
-
     let publish = false;
-    console.log(
-      "Client \x1b[31m" +
-        (client ? client.id : "BROKER_" + aedesWS.id) +
-        "\x1b[0m is trying  to publish",
-      packet.payload.toString(),
-      "on",
-      packet.topic,
-      "to broker",
-      aedesWS.id
-    );
-    if (packet.topic === "test") {
+    if (debug) {
+      console.log(
+        "Client \x1b[31m" +
+          (client ? client.id : "BROKER_" + aedesWS.id) +
+          "\x1b[0m is trying  to publish",
+        packet.payload.toString(),
+        "on",
+        packet.topic,
+        "to broker",
+        aedesWS.id
+      );
+    }
+    if (
+      packet.topic.startsWith("locations") &&
+      client.admin &&
+      packet.topic.endsWith("/update")
+    ) {
+      console.log("why npt here");
       publish = true;
     }
-    if (client.admin) {
-      /*   const settings = client;
-        const passBuff = client._parser.settings.password;
-        const username = client._parser.settings.username;
-        const pass = passBuff.toString("utf8");
-        console.log("client is: ", pass);
-  
-        if ((client.password = "test")) {
-          return callback(null);
-        } else {
-          return new Error("Not authorized");
-        } */
+    if (packet.topic === "update") {
+      publish = true;
+    }
+    if (packet.topic === "findMe") {
       publish = true;
     } else if (packet.topic === "devices") {
-      const { deviceName, fw, build, location } = await JSON.parse(
-        packet.payload
-      );
+      try {
+        const { deviceName } = await JSON.parse(packet.payload);
+        let device = await deviceModel.findOneAndUpdate(
+          { deviceName },
+          { online: true },
+          { new: true }
+        );
 
-      const deviceInstance = await new deviceModel({
+        if (!device) {
+          const newDevice = new deviceModel({ deviceName });
+          newDevice.save();
+        }
+      } catch (error) {
+        console.log("====================================");
+        console.log("error", error);
+        console.log("====================================");
+      }
+
+      publish = true;
+    } else if (packet.topic.endsWith("/profile") && client.admin) {
+      let { deviceName, fw, build, location, auto, mqttPass } =
+        await JSON.parse(packet.payload);
+
+      let isLogging = false;
+
+      if (location && auto) {
+        isLogging = location.toString().length > 0;
+        auto = auto;
+      }
+      auto = false;
+
+      const data = {
         deviceName,
+        location,
         fw,
         build,
-        active: location.length() > 0,
-        status: true,
-      });
-      const res = await deviceInstance.save();
+        auto,
+        mqttPass,
+        logging: isLogging,
+      };
+
+      const result = await deviceModel
+        .findOneAndUpdate({ deviceName }, data, { new: true })
+        .catch((err) => {
+          console.log(err);
+        });
+
+      if (!result) {
+        console.log("item was not found in db");
+      } else {
+        console.log("item was Updated on server");
+      }
 
       publish = true;
     } else if (packet.topic.endsWith("/alarm") && client.allowed) {
@@ -165,17 +191,42 @@ export const aedesWS = new Aedes({
         type,
         status,
       });
-      const res = alarminstances.save();
+      if (status) {
+        const users = await userModel.find({
+          tokens: { $exists: true, $ne: [] },
+        });
+        if (type.toLowerCase() === "alarm") {
+          if (users) {
+            for (const user of users) {
+              const data = {
+                title: `Type:${type}`,
+                body: `There is an ${name} at location ${location}`,
+                sound: "default",
+                data: { screen: "MainDashboard", location: location },
+              };
+              const responses = await sendNotification(user.tokens, data);
+              console.log(responses);
+              await addTokenstoDBForChecking(responses, user);
+            }
+          }
+        }
+        send = false;
+      }
+      const res = await alarminstances.save();
       publish = true;
     } else if (packet.topic.endsWith("/live") && client.allowed) {
       const location = packet.topic.split("/")[1];
       const { device, lux, temp, humidity } = await JSON.parse(packet.payload);
 
-      const item = liveDataModel.findOne({
-        timestamp: { $lte: new Date(Date.now() - TEN_MIN) },
-      });
+      const item = await liveDataModel
+        .findOne({ location })
+        .sort({ createdAt: -1 })
+        .limit(1);
 
-      if (item) {
+      if (item && item.createdAt <= new Date(Date.now() - TEN_MIN)) {
+        console.log("====================================");
+        console.log("saving data 10 min later:D");
+        console.log("====================================");
         const liveInstances = await new liveDataModel({
           deviceName: device,
           lux,
@@ -183,47 +234,122 @@ export const aedesWS = new Aedes({
           humidity,
           location,
         });
-        const res = liveInstances.save();
+        const res = await liveInstances.save();
+      } else {
+        const liveInstances = await new liveDataModel({
+          deviceName: device,
+          lux,
+          temp,
+          humidity,
+          location,
+        });
+        const res = await liveInstances.save();
       }
 
       publish = true;
     } else if (packet.topic.endsWith("/light") && client.allowed) {
       const location = packet.topic.split("/")[1];
-      const { sunlight, lamplight, total } = await JSON.parse(packet.payload);
+      const { sunLight, lampLight, total } = await JSON.parse(packet.payload);
 
       const lightinstances = await new lightDataModel({
         deviceName: client.id,
-        sunlight,
-        lamplight,
+        sunLight,
+        lampLight,
         total,
         location,
       });
-      const res = lightinstances.save();
+      const res = await lightinstances.save();
 
       publish = true;
     }
     if (publish) {
-      console.log(
-        "Client \x1b[31m" +
-          (client ? client.id : "BROKER_" + aedesWS.id) +
-          "\x1b[0m has published",
-        packet.payload.toString(),
-        "on",
-        packet.topic,
-        "to broker",
-        aedesWS.id
-      );
+      if (debug) {
+        console.log(
+          "Client \x1b[31m" +
+            (client ? client.id : "BROKER_" + aedesWS.id) +
+            "\x1b[0m has published",
+          packet.payload.toString(),
+          "on",
+          packet.topic,
+          "to broker",
+          aedesWS.id
+        );
+      }
+
       return callback(null);
     }
-    console.log(
-      "Client \x1b[31m" +
-        (client ? client.id : "BROKER_" + aedesWS.id) +
-        "\x1b[0m is trying  to publish",
-      packet.payload.toString(),
-      "on",
-      packet.topic,
-      "to broker",
-      aedesWS.id
-    );
   },
 });
+
+aedesWS.on("client", async function (client) {
+  console.log(
+    "Client Connected: \x1b[33m" + (client ? client.id : client) + "\x1b[0m",
+    "to broker",
+    aedesWS.id
+  );
+  const device = await deviceModel.updateOne(
+    { deviceName: client.id },
+    { $set: { online: true } }
+  );
+
+  if (client.allowed && !client.admin) client._keepaliveInterval = 30000;
+  console.log("Keepalive timeout: " + client._keepaliveInterval);
+  //aedes.publish({ topic: 'setup/profile', payload: {name:"edge-01",location:"helldomen",shaft:2,version:2,profileName:"kongensmann"},username:"per",password:"test"});
+});
+
+// fired when a client disconnects
+// when edge device disconnects  update online status
+aedesWS.on("clientDisconnect", async function (client) {
+  console.log(
+    "Client Disconnected: \x1b[31m" + (client ? client.id : client) + "\x1b[0m",
+    "to broker",
+    aedesWS.id
+  );
+  aedesWS.on("published", function (packet, client) {
+    console.log("Message published:", packet.payload.toString());
+  });
+  const device = await deviceModel.updateOne(
+    { deviceName: client.id },
+    { $set: { online: false } }
+  );
+});
+// if device stop broadcasting send mail and notifaction too user
+aedesWS.on("keepaliveTimeout", async function (client) {
+  console.log(
+    "Client LOST CONNECTION: \x1b[31m" +
+      (client ? client.id : client) +
+      "\x1b[0m",
+    "to broker",
+    aedesWS.id
+  );
+  const data = {
+    title: `Type:keepaliveTimeout`,
+    body: `device ${client.id} mqtt connection or wifi`,
+    sound: "default",
+    data: { screen: "MainDashboard", location: location },
+  };
+  const users = await userModel.find({
+    tokens: { $exists: true, $ne: [] },
+  });
+  for (const user of users) {
+    const responses = await sendNotification(user.tokens, data);
+    console.log(responses);
+    await addTokenstoDBForChecking(responses, user);
+  }
+
+  const device = await deviceModel.updateOne(
+    { deviceName: client.id },
+    { $set: { online: false } }
+  );
+
+  sendDeviceAlarm(
+    client.id,
+    "device lost mqtt connection or wifi",
+    "keepaliveTimeout"
+  );
+  // TODO: send notifcation
+  client.close();
+});
+
+aedesWS.keepalive = 30000;
+aedesWS.heartbeatInterval = 60000;
