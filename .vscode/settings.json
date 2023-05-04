@@ -1,3 +1,5 @@
 {
-    "editor.formatOnSave": true
+  "editor.formatOnSave": true,
+  "appService.defaultWebAppToDeploy": "undefined/subscriptions/105dbfc5-d2d6-4e68-945f-ca04d79a154a/resourceGroups/appsvc_linux_centralus/providers/Microsoft.Web/sites/greenleaf",
+  "appService.deploySubpath": "."
 }

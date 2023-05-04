@@ -1,11 +1,12 @@
 import { mongoose } from "mongoose";
 mongoose.set("strictQuery", true);
 
-const luserSchema = mongoose.Schema({
+const userSchema = mongoose.Schema({
   name: String,
   userName: String,
   password: String,
   role: String,
+  tokens: [String],
 });
 
-export const userModel = mongoose.model("user", luserSchema);
+export const userModel = mongoose.model("user", userSchema);
