@@ -1,11 +1,14 @@
 import Aedes from "aedes";
-import { sendMail } from "../lib/mail.js";
+import { sendDeviceAlarm } from "../lib/mail.js";
 import { getWeatherData } from "../lib/weather.js";
 import { deviceModel, ActiveDeviceModel } from "../models/deviceModel.js";
 import { alarmModel } from "../models/alarmModel.js";
 import { liveDataModel } from "../models/liveDataModel.js";
 import { lightDataModel } from "../models/lightDataModel.js";
 import net from "https";
+
+const test = 200;
+
 const https = net;
 
 //const api_key = "523956835871b2c18c5357e09cbe3618";// needs to be in an .env file but low on time
@@ -30,7 +33,7 @@ const handelDataModelTopics = async (packet, filter1, filter2) => {
       if (filter2 === "alarm") {
         if (type == "alarm") {
           let msg = { elv: elevator, loc: loc, max, min };
-          sendMail(msg);
+          sendDeviceAlarm(msg);
         }
 
         getWeatherData(city).then(async (windSpeed) => {
@@ -276,38 +279,7 @@ export function aedesHandel() {
   });
 
   // fired when a client connects
-  aedes.on("client", function (client) {
-    console.log(
-      "Client Connected: \x1b[33m" + (client ? client.id : client) + "\x1b[0m",
-      "to broker",
-      aedes.id
-    );
-    client._keepaliveInterval;
-    console.log("Keepalive timeout: " + client._keepaliveInterval);
-    //aedes.publish({ topic: 'setup/profile', payload: {name:"edge-01",location:"helldomen",shaft:2,version:2,profileName:"kongensmann"},username:"per",password:"test"});
-  });
-
-  // fired when a client disconnects
-  // send alarm when edge device disconnects and remove from list
-  aedes.on("clientDisconnect", function (client) {
-    console.log(
-      "Client Disconnected: \x1b[31m" +
-        (client ? client.id : client) +
-        "\x1b[0m",
-      "to broker",
-      aedes.id
-    );
-  });
-  aedes.on("keepaliveTimeout", async function (client) {
-    console.log(
-      "Client LOST CONNECTION: \x1b[31m" +
-        (client ? client.id : client) +
-        "\x1b[0m",
-      "to broker",
-      aedes.id
-    );
-  });
-
+  a;
   // fired when a message is published
   /*  aedes.on('publish', async function (packet, client) {
      //TODO: check intervall (30 min) for values and on change for true/false and save to db else dont save

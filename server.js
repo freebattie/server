@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import { mongoose } from "mongoose";
+import pkg from "body-parser";
 
 import { aedesHandel } from "./routes/mqtt.js";
 import { devices } from "./routes/devices.js";
@@ -14,6 +15,10 @@ import path from "path";
 import ws from "websocket-stream";
 import http from "http";
 import { aedesWS } from "./routes/wsmqtt.js";
+import { readVersion } from "./lib/readFile.js";
+import { stringify } from "querystring";
+import { userModel } from "./models/userModel.js";
+import { hashPassword } from "./lib/crypto.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const app = express();
@@ -25,9 +30,21 @@ const http_port = process.env.PORT || 3000;
 mongoose.set("strictQuery", true);
 
 mongoose
-  .connect("mongodb://127.0.0.1/greenhouse")
-  .then(async () => {
+  .connect(
+    "mongodb+srv://letmeInn:letmeInn@cluster0.dbzspey.mongodb.net/greenleaf?retryWrites=true&w=majority",
+    { useNewUrlParser: true }
+  )
+  .then(async (db) => {
     console.log("connected to db");
+    let pass = await hashPassword("test");
+
+    const data = await userModel({
+      name: "test",
+      userName: "test",
+      password: pass,
+      role: "admin",
+    });
+    data.save();
 
     const createServer = net.createServer;
 
@@ -49,6 +66,7 @@ mongoose
         topic: "aedes/hello",
         payload: "I'm broker " + aedesWS.id,
       });
+      updateFW();
     });
     server.on("error", function (err) {
       console.log("Server error", err);
@@ -77,3 +95,31 @@ app.get("/fw/:build/:fileName", async function (req, res) {
 });
 console.log("http started on port: ", http_port);
 app.listen(http_port);
+async function updateFW() {
+  try {
+    const devFW = await readVersion("./fw/dev");
+    const prodFW = await readVersion("./fw/prod");
+    const data = [
+      {
+        fw: devFW,
+        build: "dev",
+      },
+      {
+        fw: prodFW,
+        build: "prod",
+      },
+    ];
+    let msg = JSON.stringify(data);
+    const message = {
+      topic: "update",
+      payload: msg,
+    };
+
+    aedesWS.publish(message);
+  } catch (err) {
+    console.error(err);
+  }
+
+  // call the function again after a delay
+  setTimeout(updateFW, 100000);
+}

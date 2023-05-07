@@ -41,8 +41,11 @@ export function locations() {
       return res.sendStatus(403);
     }
     const { _id } = req.body;
-
-    const oldLoc = await locationModel.findOne({ _id });
+    console.log(_id);
+    const oldLoc = await locationModel
+      .findOne({ _id })
+      .then()
+      .catch((e) => console.log(e));
 
     if (oldLoc) {
       const run = await locationModel.deleteOne({ _id });
@@ -62,12 +65,19 @@ export function locations() {
     console.log("====================================");
     console.log(data);
     console.log("====================================");
-    const loc = await locationModel.updateOne({ _id }, { $set: data });
-    if (loc.nModifed == 0) {
-      res.status(404).json({ message: "Location not found" });
-    } else {
-      return res.status(200).json(loc);
-    }
+    const loc = await locationModel
+      .updateOne({ _id }, data)
+      .then((doc) => {
+        console.log(doc);
+        if (doc.nModifed == 0) {
+          res.status(404).json({ message: "Location not found" });
+        } else {
+          return res.status(200).json(doc);
+        }
+      })
+      .catch((err) => {
+        console.log(err);
+      });
   });
   route.get("/:id", async (req, res) => {
     if (!req.user) {

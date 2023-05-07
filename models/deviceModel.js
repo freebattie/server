@@ -10,8 +10,8 @@ const edgeDeviceSchema = mongoose.Schema(
     build: String,
     auto: Boolean,
     mqttPass: String,
-    active: Boolean,
-    status: Boolean,
+    online: Boolean,
+    logging: Boolean,
   },
   { timestamps: true }
 );
