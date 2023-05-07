@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "start": "sudo node server.js"
   },
   "author": "",
   "license": "ISC",
@@ -17,6 +18,7 @@
     "body-parser": "^1.20.2",
     "cookie-parser": "^1.4.6",
     "dotenv": "^16.0.3",
+    "expo-server-sdk": "^3.7.0",
     "express": "^4.18.2",
     "mongoose": "^7.0.3",
     "nodemailer": "^6.9.1",

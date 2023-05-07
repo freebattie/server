@@ -11,33 +11,31 @@ import {
 // Encryption function
 
 const secretKey = process.env.KEY;
-console.log("Example Secret Key:", secretKey);
-console.log("==============KEYYYYY======================");
-console.log(secretKey);
-console.log("====================================");
 
 export function requestUser() {
   return async (req, res, next) => {
+   
     console.log("signed cookies:", req.signedCookies);
     let { username, role } = req.signedCookies;
 
     if (username) {
+      
       username = await decrypt(username, process.env.KEY);
+      console.log("role is ", username);
       role = await decrypt(role, process.env.KEY);
-      console.log("====================================");
-      console.log(username);
-      console.log("====================================");
-
-      console.log("cleartext: ", username);
-      console.log("trying to get the cokcie", username);
+     
       const users = await userModel.find();
 
       req.user = users.find((u) => u.userName === username);
-      req.role = users.map((u) => {
-        return u.userName === username ? u.role : null;
-      })[0];
-    }
+      req.user.password="";
+      console.log("req.user is", req.user);
+      req.role= users.find((u) =>  u.userName === username
+      ).role;
+     
+     console.log(req.role);
 
+    }
+    
     next();
   };
 }
@@ -65,7 +63,6 @@ export function userLogin() {
         : null;
     });
 
-    console.log("user is ", user);
     if (!user) {
       return res.sendStatus(401);
     }
@@ -74,14 +71,13 @@ export function userLogin() {
       let rle = await encrypt(user.role, process.env.KEY);
       res.cookie("username", usrname, {
         signed: true,
-        maxAge: 60 * 60 * 1000,
         httpOnly: true,
       });
       res.cookie("role", rle, {
         signed: true,
-        maxAge: 60 * 60 * 1000,
         httpOnly: true,
       });
+     
       res.sendStatus(200);
     } else return res.sendStatus(401);
   });
@@ -114,7 +110,7 @@ export function userLogin() {
       role: "user",
     });
     result.save();
-    console.log("saved");
+    console.log("user saved");
     res.sendStatus(200);
   });
 
@@ -122,6 +118,26 @@ export function userLogin() {
     res.clearCookie("username");
     res.clearCookie("role");
     res.sendStatus(204);
+  });
+  route.post("/token", async (req, res, next) => {
+    if (!req.user) {
+      return res.sendStatus(401);
+    }
+    if (req.role != "admin") {
+      console.log("is it token",req.role);
+      return res.sendStatus(403);
+    }
+    const { username, token } = req.body;
+
+    const user = await userModel.findOneAndUpdate(
+      { username },
+      { $addToSet: { tokens: token } },
+      {
+        new: true,
+      }
+    );
+
+    return res.sendStatus(200);
   });
 
   return route;
