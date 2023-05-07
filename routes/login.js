@@ -14,28 +14,24 @@ const secretKey = process.env.KEY;
 
 export function requestUser() {
   return async (req, res, next) => {
-   
     console.log("signed cookies:", req.signedCookies);
     let { username, role } = req.signedCookies;
 
     if (username) {
-      
       username = await decrypt(username, process.env.KEY);
       console.log("role is ", username);
       role = await decrypt(role, process.env.KEY);
-     
+
       const users = await userModel.find();
 
       req.user = users.find((u) => u.userName === username);
-      req.user.password="";
+      req.user.password = "";
       console.log("req.user is", req.user);
-      req.role= users.find((u) =>  u.userName === username
-      ).role;
-     
-     console.log(req.role);
+      req.role = users.find((u) => u.userName === username).role;
 
+      console.log(req.role);
     }
-    
+
     next();
   };
 }
@@ -77,7 +73,7 @@ export function userLogin() {
         signed: true,
         httpOnly: true,
       });
-     
+
       res.sendStatus(200);
     } else return res.sendStatus(401);
   });
@@ -124,7 +120,7 @@ export function userLogin() {
       return res.sendStatus(401);
     }
     if (req.role != "admin") {
-      console.log("is it token",req.role);
+      console.log("is it token", req.role);
       return res.sendStatus(403);
     }
     const { username, token } = req.body;

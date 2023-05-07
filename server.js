@@ -129,6 +129,13 @@ app.get("/fw", async function (req, res) {
     root: __dirname,
   });
 });
+app.get("/fw", async function (req, res) {
+  console.log("sending file");
+
+  res.sendFile("fw/fw.json", {
+    root: __dirname,
+  });
+});
 app.get("/fw/:build/:fileName", async function (req, res) {
   console.log("sending file");
   const file = path.join(

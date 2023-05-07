@@ -28,19 +28,9 @@ export function locations() {
     if (oldLoc) {
       return res.status(409).json({ message: "Location already exists" });
     } else {
-      const loc = await new locationModel({
-        location: location.toLowerCase(),
-        city: city.toLowerCase(),
-      });
-      await loc.save();
-
-      try {
-        res.status(201).json(loc);
-      } catch (error) {
-        console.log("====================================");
-        console.log("error", error);
-        console.log("====================================");
-      }
+      const loc = await new locationModel({ location, city });
+      loc.save();
+      res.status(201).json(loc);
     }
   });
   route.delete("/", async (req, res) => {
